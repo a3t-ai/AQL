@@ -35,7 +35,7 @@ RECALL FROM PROCEDURAL LIKE "pod OOMKilled restart" CONFIDENCE 0.7 LIMIT 3
 
 ### Browser Playground
 
-**[Launch AQL Playground](https://srirammails.github.io/AQL/playground/)** — Parse and execute AQL queries instantly in your browser. No installation required.
+**[Launch AQL Playground](https://a3t-ai.github.io/AQL/playground/)** — Parse and execute AQL queries instantly in your browser. No installation required.
 
 > Click an example, or write your own. Everything runs locally via WASM.
 > The playground parses AQL v0.13 and runs the core: `RECALL`, `STORE`, `UPDATE`,
@@ -334,7 +334,7 @@ The parser crate is independent and can be used with any backend.
 
 ```toml
 [dependencies]
-aql-parser = { git = "https://github.com/srirammails/AQL", tag = "v0.13.0" }
+aql-parser = { git = "https://github.com/a3t-ai/AQL", tag = "v0.13.0" }
 ```
 
 ```rust
@@ -360,7 +360,7 @@ Single-node reference implementation using LanceDB for vector storage.
 
 ```toml
 [dependencies]
-clawdb = { git = "https://github.com/srirammails/AQL", tag = "v0.13.0" }
+clawdb = { git = "https://github.com/a3t-ai/AQL", tag = "v0.13.0" }
 ```
 
 ```rust

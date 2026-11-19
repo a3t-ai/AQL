@@ -56,25 +56,75 @@ pub fn script_steps(input: &str, default: Option<&str>) -> ParseResult<Vec<(usiz
     Ok(out)
 }
 
-/// Whether `input` is a script: more than one statement, or a USE.
+/// Whether `input` is a script: more than one statement, or a USE. Decided on the text
+/// outside strings and `--` comments: a comment before the USE, or a `"` or `;` inside
+/// a comment, made a script look like one statement ("expected EOI" at its second
+/// statement, vc-dev Query Console, 19 Nov).
 pub fn is_script(input: &str) -> bool {
-    let t = input.trim_start();
-    if t.len() >= 3 && t[..3].eq_ignore_ascii_case("USE") && t[3..].starts_with(|c: char| c.is_whitespace()) {
+    let code = code_of(input);
+    let t = code.trim_start();
+    if t.len() >= 3 && t[..3].eq_ignore_ascii_case("USE") && t[3..].starts_with(|c: char| c.is_whitespace() || c == '"' || c == '$') {
         return true;
     }
-    // A `;` outside a string (and not the last character).
-    let (mut in_str, mut escaped) = (false, false);
-    let body = input.trim_end().trim_end_matches(';');
-    for c in body.chars() {
-        match (in_str, escaped, c) {
-            (true, true, _) => escaped = false,
-            (true, false, '\\') => escaped = true,
-            (_, false, '"') => in_str = !in_str,
-            (false, _, ';') => return true,
-            _ => {}
+    // A `;` with a statement after it (a trailing one ends the only statement).
+    code.trim_end().trim_end_matches(';').contains(';')
+}
+
+/// `input` without its comments and with each string literal emptied (`""`): the
+/// characters that are AQL syntax.
+fn code_of(input: &str) -> String {
+    let mut code = String::with_capacity(input.len());
+    let mut chars = input.chars().peekable();
+    while let Some(c) = chars.next() {
+        match c {
+            '"' => {
+                let mut escaped = false;
+                for d in chars.by_ref() {
+                    match (escaped, d) {
+                        (true, _) => escaped = false,
+                        (false, '\\') => escaped = true,
+                        (false, '"') => break,
+                        _ => {}
+                    }
+                }
+                code.push_str("\"\"");
+            }
+            '-' if chars.peek() == Some(&'-') => {
+                for d in chars.by_ref() {
+                    if d == '\n' {
+                        code.push('\n');
+                        break;
+                    }
+                }
+            }
+            c => code.push(c),
         }
     }
-    false
+    code
+}
+
+#[cfg(test)]
+mod script_tests {
+    use super::{is_script, script_steps};
+
+    #[test]
+    fn scripts_are_found_past_comments() {
+        // A comment before the USE.
+        assert!(is_script("-- the a3t project\n\nUSE \"a3t\" ;\nRECALL FROM WORKING"));
+        // A quote in a comment no longer hides the separator.
+        assert!(is_script("-- the \"console's query\n\n\n\n\nUSE \"a3t\" ;\nRECALL FROM WORKING"));
+        // A ; in a comment or a string is no separator; a trailing one ends the statement.
+        assert!(!is_script("RECALL FROM WORKING -- one; two\n"));
+        assert!(!is_script(r#"RECALL FROM SEMANTIC WHERE content = "a;b" NAMESPACE "x""#));
+        assert!(!is_script("RECALL FROM WORKING;\n-- done"));
+        assert!(!is_script("RECALL FROM SEMANTIC WHERE n = -1 NAMESPACE \"x\""));
+        assert!(is_script("STORE INTO WORKING (k = 1) NAMESPACE \"x\"; RECALL FROM WORKING NAMESPACE \"x\""));
+        assert!(is_script("use \"x\"\nRECALL FROM WORKING"));
+        // And the script runs: the RECALL in the namespace USE named.
+        let steps = script_steps("-- the \"console's query\n\n\n\n\nUSE \"a3t\" ;\nRECALL FROM WORKING", None).unwrap();
+        assert_eq!(steps.len(), 1);
+        assert_eq!(steps[0].1.to_string(), r#"RECALL FROM WORKING NAMESPACE "a3t""#);
+    }
 }
 
 // ---------------------------------------------------------------- statements
